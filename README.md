@@ -4,6 +4,8 @@
 
 An automatically-reconnecting websocket wrapper that respects server reachability and good backoff practices
 
+### STILL VERY MUCH A WORK IN PROGRESS
+
 ## Features
 
 * [umd](https://github.com/umdjs/umd) / universal library
