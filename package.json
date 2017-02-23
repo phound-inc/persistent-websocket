@@ -1,0 +1,40 @@
+{
+  "name": "persistent-websocket",
+  "version": "0.0.1",
+  "description": "An automatically-reconnecting websocket wrapper that respects server reachability and good backoff practices",
+  "main": "lib/library.js",
+  "scripts": {
+    "build": "webpack --env build",
+    "dev": "webpack --progress --colors --watch --env dev",
+    "test": "mocha --compilers js:babel-core/register --colors ./test/*.spec.js",
+    "test:watch": "mocha --compilers js:babel-core/register --colors -w ./test/*.spec.js"
+  },
+  "devDependencies": {
+    "babel": "6.23.0",
+    "babel-core": "6.23.1",
+    "babel-eslint": "7.1.1",
+    "babel-loader": "6.3.2",
+    "babel-plugin-add-module-exports": "0.2.1",
+    "babel-preset-latest": "6.22.0",
+    "chai": "3.5.0",
+    "eslint": "3.16.1",
+    "eslint-loader": "1.6.3",
+    "mocha": "3.2.0",
+    "webpack": "2.2.1",
+    "yargs": "6.6.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phound-inc/persistent-websocket.git"
+  },
+  "keywords": [
+    "websocket",
+    "reconnect"
+  ],
+  "author": "Doug Keen",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/phound-inc/persistent-websocket/issues"
+  },
+  "homepage": "https://github.com/phound-inc/persistent-websocket"
+}
