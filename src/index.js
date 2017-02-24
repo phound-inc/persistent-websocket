@@ -7,6 +7,13 @@
 
 import Backoff from "./backoff";
 
+export const READYSTATE = {
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSING: 2,
+  CLOSED: 3
+};
+
 const defaultOptions = {
   debug: false,
   initialBackoffDelayMillis: 500,
@@ -49,7 +56,7 @@ export class PersistentWebsocket {
     this._hasConnected = false;
     this._retryCount = 0;
 
-    this._pingIntervalId = 0;
+    this._pingTimeoutId = 0;
     this._scheduledReconnectTimeoutId = 0;
     this._websocketConnectionCheckTimeoutId = 0;
   }
@@ -86,38 +93,50 @@ export class PersistentWebsocket {
   }
 
   _onWebsocketMessage(event) {
+    // Any message counts as a "pong"
     this._waitingForPong = false;
+
+    // Reschedule ping so pings only occur when the inbound side of the connection is quiet for ${pingIntervalSeconds}
+    this._schedulePing();
+
     this.onmessage(event);
   }
 
   _onWebsocketOpen(event) {
-    // Start pings
-    const {pingSendFunction, pingIntervalSeconds} = this._options;
-    if (pingSendFunction && pingIntervalSeconds) {
-      this._pingIntervalId = setInterval(this._sendPing, this._options.pingIntervalSeconds, this);
-    }
-
     event.wasReconnect = this._hasConnected;
     this.onopen(event);
     this._hasConnected = true;
     this._retryCount = 0;
 
-    if (event.target.readyState == WebSocket.OPEN) {
+    if (event.target.readyState == READYSTATE.OPEN) {
+      // Start pings
+      this._schedulePing();
       this._cancelWebsocketConnectionCheck();
     }
   }
 
-  _sendPing(self) {
-    self._waitingForPong = true;
-    self._options.pingSendFunction(self);
-    setTimeout(self._checkPingResult, self._options.pingTimeoutMillis, self);
+  _sendPing() {
+    this._waitingForPong = true;
+    this._options.pingSendFunction(this);
+    setTimeout(this._checkPingResult.bind(this), this._options.pingTimeoutMillis);
   }
 
-  _checkPingResult(self) {
-    if (self._waitingForPong) {
-      clearInterval(self._pingIntervalId);
-      self._pingIntervalId = 0;
-      self._websocket.close(4001, "Closing websocket due to ping failure.");
+  _schedulePing() {
+    // Always clear out any existing scheduled pings
+    if (this._pingTimeoutId) {
+      clearTimeout(this._pingTimeoutId);
+      this._pingTimeoutId = 0;
+    }
+
+    const {pingSendFunction, pingIntervalSeconds} = this._options;
+    if (pingSendFunction && pingIntervalSeconds) {
+      this._pingTimeoutId = setTimeout(this._sendPing.bind(this), pingIntervalSeconds*1000);
+    }
+  }
+
+  _checkPingResult() {
+    if (this._waitingForPong) {
+      this._websocket.close(4001, "Closing websocket due to ping failure.");
     }
   }
 
@@ -150,7 +169,10 @@ export class PersistentWebsocket {
 
   _checkWebsocketConnection() {
     this._debugLog(`Checking websocket connection. ReadyState is ${this._websocket.readyState}`);
-    if (this._websocket.readyState != WebSocket.OPEN) {
+    if (this._websocket.readyState === READYSTATE.OPEN) {
+      // Start pings
+      this._schedulePing();
+    } else {
       this._websocket.close(4000, "Unable to establish websocket connection before the configured connectTimeoutMillis");
     }
   }
