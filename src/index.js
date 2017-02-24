@@ -1,10 +1,3 @@
-/**
- * WHAT NEEDS TO BE DONE
- *
- * Reachability
- * Like, all the logic
- */
-
 import Backoff from "./backoff";
 
 export const READYSTATE = {
@@ -17,11 +10,12 @@ export const READYSTATE = {
 const defaultOptions = {
   debug: false,
   initialBackoffDelayMillis: 500,
-  maxBackoffDelayMillis: 90000,
+  maxBackoffDelayMillis: 120000,
   pingSendFunction: null, // Function that takes the PersistentWebsocket instance as its only parameter
   pingIntervalSeconds: 30,
   pingTimeoutMillis: 2000,
   connectTimeoutMillis: 3000,
+  reachabilityTestUrl: null,
 };
 
 function noop() {
@@ -59,10 +53,15 @@ export class PersistentWebsocket {
     this._pingTimeoutId = 0;
     this._scheduledReconnectTimeoutId = 0;
     this._websocketConnectionCheckTimeoutId = 0;
+    this._reachabilityCheckTimeoutId = 0;
   }
 
   _createWebsocket(url, protocols) {
     return new WebSocket(url, protocols);
+  }
+
+  _createXhr() {
+    return new XMLHttpRequest();
   }
 
   _openWebsocket() {
@@ -84,7 +83,7 @@ export class PersistentWebsocket {
     event.wasExpected = this._manuallyClosed;
     this.onclose(event);
     if (!this._manuallyClosed) {
-      this._scheduleReconnect();
+      this._checkReachabilityAndScheduleReconnect();
     }
   }
 
@@ -116,6 +115,7 @@ export class PersistentWebsocket {
   }
 
   _sendPing() {
+    this._debugLog("Pinging websocket...");
     this._waitingForPong = true;
     this._options.pingSendFunction(this);
     setTimeout(this._checkPingResult.bind(this), this._options.pingTimeoutMillis);
@@ -124,19 +124,52 @@ export class PersistentWebsocket {
   _schedulePing() {
     // Always clear out any existing scheduled pings
     if (this._pingTimeoutId) {
-      clearTimeout(this._pingTimeoutId);
-      this._pingTimeoutId = 0;
+      this._cancelPing();
     }
 
     const {pingSendFunction, pingIntervalSeconds} = this._options;
     if (pingSendFunction && pingIntervalSeconds) {
-      this._pingTimeoutId = setTimeout(this._sendPing.bind(this), pingIntervalSeconds*1000);
+      this._pingTimeoutId = setTimeout(this._sendPing.bind(this), pingIntervalSeconds * 1000);
     }
+  }
+
+  _cancelPing() {
+    clearTimeout(this._pingTimeoutId);
+    this._pingTimeoutId = 0;
   }
 
   _checkPingResult() {
     if (this._waitingForPong) {
+      this._debugLog("Closing websocket due to ping failure.");
       this._websocket.close(4001, "Closing websocket due to ping failure.");
+    }
+  }
+
+  _checkReachabilityAndScheduleReconnect() {
+    if (!this._options.reachabilityTestUrl) {
+      this._scheduleReconnect();
+    } else {
+      const xhr = this._createXhr();
+      xhr.addEventListener("load", () => {
+        this._reachabilityCheckTimeoutId = 0;
+        this._debugLog(`ONLINE: HEAD request to ${this._options.reachabilityTestUrl} succeeded.`);
+        this._scheduleReconnect();
+      });
+      xhr.addEventListener("error", () => {
+        // Check if online again in 3 seconds
+        this._debugLog(`OFFLINE: Unable to reach ${this._options.reachabilityTestUrl}.\nTrying again in 3s.`);
+        this._backoff.reset();
+        this._reachabilityCheckTimeoutId = setTimeout(this._checkReachabilityAndScheduleReconnect.bind(this), 3000);
+      });
+      xhr.open("HEAD", this._options.reachabilityTestUrl);
+      xhr.send();
+    }
+  }
+
+  _cancelReachabilityCheck() {
+    if (this._reachabilityCheckTimeoutId) {
+      clearTimeout(this._reachabilityCheckTimeoutId);
+      this._reachabilityCheckTimeoutId = 0;
     }
   }
 
@@ -195,6 +228,8 @@ export class PersistentWebsocket {
     this._manuallyClosed = true;
     this._cancelScheduledReconnect();
     this._cancelWebsocketConnectionCheck();
+    this._cancelReachabilityCheck();
+    this._cancelPing();
 
     if (!this._websocket) {
       throw "Can't close websocket because it was never opened.";

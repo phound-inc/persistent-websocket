@@ -1,6 +1,6 @@
 /*global describe, it, before, after */
 import chai from 'chai';
-import lolex from 'lolex';
+import sinon from 'sinon';
 import {PersistentWebsocket, READYSTATE} from '../src/index';
 
 chai.expect();
@@ -40,7 +40,7 @@ class FakeWebSocket {
 }
 
 describe('PersistentWebsocket', function () {
-  let fakeWebsocket;
+  let fakeWebsocket, xhr, xhrRequests, clock;
 
   before(function () {
     PersistentWebsocket.prototype._createWebsocket = (url, protocols) => {
@@ -50,12 +50,15 @@ describe('PersistentWebsocket', function () {
   });
 
   beforeEach(function () {
-    // Override global setTimeout and all other timer functions
-    this.clock = lolex.install();
+    clock = sinon.useFakeTimers();
+    xhr = sinon.useFakeXMLHttpRequest();
+    xhrRequests = [];
+    xhr.onCreate = (r) => xhrRequests.push(r);
   });
 
   afterEach(function () {
-    this.clock.uninstall();
+    clock.restore();
+    xhr.restore();
   });
 
   it('waits to be opened', function () {
@@ -63,7 +66,7 @@ describe('PersistentWebsocket', function () {
     expect(fakeWebsocket).to.be.undefined;
 
     pws.open();
-    this.clock.tick(1);
+    clock.tick(1);
     expect(fakeWebsocket.readyState).to.equal(READYSTATE.OPEN);
   });
 
@@ -77,12 +80,12 @@ describe('PersistentWebsocket', function () {
     });
     pws.open();
     expect(pingCalled).to.be.false;
-    this.clock.tick(750);
+    clock.tick(750);
     fakeWebsocket.onmessage({whatever:"junk"});
-    this.clock.tick(750);
+    clock.tick(750);
     // Prior message should have reset the ping interval timer
     expect(pingCalled).to.be.false;
-    this.clock.tick(300);
+    clock.tick(300);
     expect(pingCalled).to.be.true;
   });
 });
