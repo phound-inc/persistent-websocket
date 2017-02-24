@@ -32,8 +32,8 @@ pws.onerror = (e) => console.log(e);
 
 pws.open();
 
-// Now you can use the PersistentWebsocket instance like a plain WebSocket instance, except this instance will 
-// automatically try to reconnect if the connection dies 
+// Now you can use the PersistentWebsocket instance like a plain WebSocket instance, 
+// except this instance will automatically try to reconnect if the connection dies 
 ```
 
 The full list of available options is:
