@@ -59,6 +59,10 @@ An optional url to use to test for internet connectivity (may be absolute or rel
 A `HEAD` request will be sent to this url before trying to reconnect, and if it fails, the library will reset the 
 backoff timing to its initial value and poll that url until it successfully responds.  
 If left undefined, no reachability/internet connectivity check will be performed.
+* `reachabilityTestTimeoutMillis` _numeric_ (default `2000`):  
+How long to wait for a response from the `reachabilityTestUrl`
+* `reachabilityPollingIntervalMillis` _numeric_ (default `3000`):  
+How long to between a failed reachability test and the next request to the `reachabilityTestUrl`
  
 
 ## License
