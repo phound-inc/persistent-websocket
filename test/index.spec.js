@@ -53,27 +53,26 @@ describe('PersistentWebsocket', function () {
       fakeWebsocket = new FakeWebSocket(url, protocols);
       return fakeWebsocket;
     };
+    xhr = global.XMLHttpRequest = sinon.useFakeXMLHttpRequest();
+    xhr.onCreate = (r) => xhrRequests.push(r);
   });
 
   beforeEach(function () {
     clock = sinon.useFakeTimers();
-    xhr = sinon.useFakeXMLHttpRequest();
     xhrRequests = [];
-    xhr.onCreate = (r) => xhrRequests.push(r);
   });
 
   afterEach(function () {
     clock.restore();
-    xhr.restore();
   });
 
   it('waits to be opened', function () {
     const pws = new PersistentWebsocket(`setReadyState|${READYSTATE.OPEN}|0`);
-    expect(fakeWebsocket).to.be.undefined;
+    expect(pws._websocket).to.be.undefined;
 
     pws.open();
     clock.tick(1);
-    expect(fakeWebsocket.readyState).to.equal(READYSTATE.OPEN);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
   });
 
   it('pings when the connection is quiet', function () {
@@ -87,7 +86,7 @@ describe('PersistentWebsocket', function () {
     pws.open();
     expect(pingCalled).to.be.false;
     clock.tick(750);
-    fakeWebsocket.onmessage({whatever: "junk"});
+    pws._websocket.onmessage({whatever: "junk"});
     clock.tick(750);
     // Prior message should have reset the ping interval timer
     expect(pingCalled).to.be.false;
@@ -101,6 +100,51 @@ describe('PersistentWebsocket', function () {
     clock.tick(60000); // Just make sure nothing explodes when the ping interval passes
   });
 
+  it('respects ping configuration values', function () {
+    let pingCalled = false;
+    let pws = new PersistentWebsocket(`setReadyState|${READYSTATE.OPEN}|0`, {
+      pingSendFunction: (ws) => {
+        pingCalled = true;
+      },
+      pingIntervalSeconds: 1
+    });
+    pws.open();
+    expect(pingCalled).to.be.false;
+    clock.tick(1100);
+    expect(pingCalled).to.be.true;
+
+    pingCalled = false;
+    pws = new PersistentWebsocket(`setReadyState|${READYSTATE.OPEN}|0`, {
+      pingSendFunction: (ws) => {
+        pingCalled = true;
+      },
+      pingIntervalSeconds: 2
+    });
+    pws.open();
+    clock.tick(1100);
+    expect(pingCalled).to.be.false;
+    clock.tick(1000);
+    expect(pingCalled).to.be.true;
+
+    pingCalled = false;
+    pws = new PersistentWebsocket(`setReadyState|${READYSTATE.OPEN}|0`, {
+      pingSendFunction: () => {
+        pingCalled = true;
+      },
+      pingIntervalSeconds: 1,
+      pingTimeoutMillis: 100,
+      initialBackoffDelayMillis: 500,
+    });
+    pws.onclose = sinon.spy();
+    pws.open();
+    clock.tick(1001);
+    expect(pingCalled).to.be.true;
+    expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
+    clock.tick(100);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.CLOSED);
+    sinon.assert.called(pws.onclose);
+  });
+
   it('automatically reconnects', function () {
     const wsActions = [
       `setReadyState|${READYSTATE.OPEN}|200`,
@@ -110,11 +154,11 @@ describe('PersistentWebsocket', function () {
     pws.open();
     clock.tick(900);
     const firstWs = fakeWebsocket;
-    expect(fakeWebsocket.readyState).to.equal(READYSTATE.OPEN);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
     clock.tick(100);
-    expect(fakeWebsocket.readyState).to.equal(READYSTATE.CLOSED);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.CLOSED);
     clock.tick(500);
-    expect(fakeWebsocket.readyState).to.equal(READYSTATE.OPEN);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
 
     // Make sure it's a new websocket
     const secondWs = fakeWebsocket;
@@ -136,12 +180,97 @@ describe('PersistentWebsocket', function () {
     });
     pws.open();
     clock.tick(100);
-    expect(fakeWebsocket.readyState).to.equal(READYSTATE.OPEN);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
     clock.tick(1000);
     expect(pingCalled).to.be.true;
     clock.tick(500);
-    expect(fakeWebsocket.readyState).to.equal(READYSTATE.CLOSED);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.CLOSED);
     clock.tick(1100);
-    expect(fakeWebsocket.readyState).to.equal(READYSTATE.OPEN);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
+  });
+
+  it('doesn\'t reconnect after manual closing', function () {
+    const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|1`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','));
+    pws.open();
+    clock.tick(500);
+    pws.close();
+    clock.tick(60000);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.CLOSED);
+  });
+
+  it('times out if it takes to long to establish connection', function () {
+    const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|10000`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','), {
+      connectTimeoutMillis: 100,
+    });
+    pws.onclose = sinon.spy();
+    pws.open();
+    clock.tick(500);
+    expect(pws._websocket.readyState).to.equal(READYSTATE.CLOSED);
+    sinon.assert.called(pws.onclose);
+  });
+
+  it('adds wasExpected field on close events', function () {
+    const closeEvents = [];
+    const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|1`,
+      `setReadyState|${READYSTATE.CLOSED}|1000`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','));
+    pws.onclose = (e) => closeEvents.push(e);
+    pws.open();
+    clock.tick(1500);
+    expect(closeEvents.pop().wasExpected).to.be.false;
+    pws.close();
+    clock.tick(1000);
+    expect(closeEvents.pop().wasExpected).to.be.true;
+  });
+
+  it('adds wasReconnect field on open events', function () {
+    const openEvents = [];
+    const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|1`,
+      `setReadyState|${READYSTATE.CLOSED}|1000`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','), {initialBackoffDelayMillis: 1});
+    pws.onopen = (e) => openEvents.push(e);
+    pws.open();
+    clock.tick(500);
+    expect(openEvents.pop().wasReconnect).to.be.false;
+    clock.tick(1000);
+    expect(openEvents.pop().wasReconnect).to.be.true;
+  });
+
+  it('checks reachability endpoint before reconnecting', function () {
+    const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|100`,
+      `setReadyState|${READYSTATE.CLOSED}|1000`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','), {
+      initialBackoffDelayMillis: 1,
+      reachabilityTestUrl: '/favicon.ico',
+      reachabilityTestTimeoutMillis: 1000,
+      reachabilityPollingIntervalMillis: 2000,
+    });
+    pws.open();
+    clock.tick(1200);
+    expect(xhrRequests.length).to.equal(1);
+    expect(xhrRequests[0].url).to.equal('/favicon.ico');
+    clock.tick(1000);
+    // Xhr request should have timed out
+    expect(pws._websocket.readyState).to.equal(READYSTATE.CLOSED);
+    clock.tick(2000);
+    // Should have another reachability request
+    expect(xhrRequests.length).to.equal(2);
+    expect(xhrRequests[1].url).to.equal('/favicon.ico');
+    xhrRequests[1].respond(200);
+    clock.tick(200);
+    // Should have reconnected after a successful reachability check
+    expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
   });
 });
