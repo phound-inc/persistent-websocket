@@ -16,6 +16,8 @@ const defaultOptions = {
   pingTimeoutMillis: 2000,
   connectTimeoutMillis: 3000,
   reachabilityTestUrl: null,
+  reachabilityTestTimeoutMillis: 2000,
+  reachabilityPollingIntervalMillis: 3000,
 };
 
 function noop() {
@@ -150,18 +152,23 @@ export class PersistentWebsocket {
       this._scheduleReconnect();
     } else {
       const xhr = this._createXhr();
-      xhr.addEventListener("load", () => {
+      xhr.open("HEAD", this._options.reachabilityTestUrl);
+      xhr.timeout = this._options.reachabilityTestTimeoutMillis;
+      xhr.onload = () => {
         this._reachabilityCheckTimeoutId = 0;
         this._debugLog(`ONLINE: HEAD request to ${this._options.reachabilityTestUrl} succeeded.`);
         this._scheduleReconnect();
-      });
-      xhr.addEventListener("error", () => {
+      };
+      const retryLater = () => {
         // Check if online again in 3 seconds
         this._debugLog(`OFFLINE: Unable to reach ${this._options.reachabilityTestUrl}.\nTrying again in 3s.`);
         this._backoff.reset();
-        this._reachabilityCheckTimeoutId = setTimeout(this._checkReachabilityAndScheduleReconnect.bind(this), 3000);
-      });
-      xhr.open("HEAD", this._options.reachabilityTestUrl);
+        this._reachabilityCheckTimeoutId = setTimeout(
+          this._checkReachabilityAndScheduleReconnect.bind(this),
+          this._options.reachabilityPollingIntervalMillis);
+      };
+      xhr.onerror = retryLater;
+      xhr.ontimeout = retryLater;
       xhr.send();
     }
   }
