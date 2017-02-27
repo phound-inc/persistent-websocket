@@ -22,12 +22,14 @@ class FakeWebSocket {
     this.readyState = READYSTATE.CONNECTING;
 
     this.url.split(",").forEach((actionString) => {
-      const [method, argJsonString, timeout] = actionString.split("|");
-      const arg = JSON.parse(argJsonString);
-      const self = this;
-      setTimeout(() => {
-        self[method](arg)
-      }, parseInt(timeout));
+      if (actionString) {
+        const [method, argJsonString, timeout] = actionString.split("|");
+        const arg = JSON.parse(argJsonString);
+        const self = this;
+        setTimeout(() => {
+          self[method](arg)
+        }, parseInt(timeout));
+      }
     });
   }
 
@@ -272,5 +274,27 @@ describe('PersistentWebsocket', function () {
     clock.tick(200);
     // Should have reconnected after a successful reachability check
     expect(pws._websocket.readyState).to.equal(READYSTATE.OPEN);
+  });
+
+  it('resets backoff after a reachability failure', function () {
+    const pws = new PersistentWebsocket('', {
+      connectTimeoutMillis: 100,
+      initialBackoffDelayMillis: 100,
+      maxBackoffDelayMillis: 101,
+      reachabilityTestUrl: '/favicon.ico',
+      reachabilityTestTimeoutMillis: 100,
+      reachabilityPollingIntervalMillis: 100,
+    });
+    pws._backoff.reset = sinon.spy(pws._backoff.reset);
+    pws.open();
+    clock.tick(101); // Connect should have timed out, and reachability xhr issued
+    xhrRequests.pop().respond(200); // Successful reachability test
+    clock.tick(100); // Tick past initial backoff
+    clock.tick(100); // Tick past connection timeout
+    sinon.assert.notCalled(pws._backoff.reset);
+
+    xhrRequests.pop().ontimeout(); // Force a reachability timeout
+
+    sinon.assert.called(pws._backoff.reset);
   });
 });
