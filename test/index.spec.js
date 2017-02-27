@@ -297,4 +297,18 @@ describe('PersistentWebsocket', function () {
 
     sinon.assert.called(pws._backoff.reset);
   });
+
+  it('remembers binaryType setting between reconnects', function () {
+      const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|100`,
+      `setReadyState|${READYSTATE.CLOSED}|1000`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','), {
+      initialBackoffDelayMillis: 1,
+    });
+    pws.open();
+    pws.binaryType = "test";
+    clock.tick(1500);
+    expect(pws._websocket.binaryType).to.equal("test");
+  });
 });
