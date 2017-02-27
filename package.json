@@ -1,6 +1,6 @@
 {
   "name": "persistent-websocket",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An automatically-reconnecting websocket wrapper that respects server reachability and good backoff practices",
   "main": "lib/library.js",
   "scripts": {
