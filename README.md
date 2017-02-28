@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/phound-inc/persistent-websocket.svg?branch=master)](https://travis-ci.org/phound-inc/persistent-websocket)
+[![npm version](https://badge.fury.io/js/persistent-websocket.svg)](https://badge.fury.io/js/persistent-websocket)
 
 # Persistent Websocket
 
