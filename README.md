@@ -5,7 +5,7 @@
 
 An automatically-reconnecting websocket wrapper that respects server reachability and good backoff practices
 
-### ALPHA QUALITY - Still lots of tests to be written and bugs to be found
+### BETA QUALITY - Not a lot of production testing yet. Please report bugs!
 
 
 ## Features
