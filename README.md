@@ -5,9 +5,6 @@
 
 An automatically-reconnecting websocket wrapper that respects server reachability and good backoff practices
 
-### BETA QUALITY - Not a lot of production testing yet. Please report bugs!
-
-
 ## Features
 
 * Optionally ping the backend (using a custom function) to make sure you're not on a zombie connection
