@@ -299,7 +299,7 @@ describe('PersistentWebsocket', function () {
   });
 
   it('remembers binaryType setting between reconnects', function () {
-      const wsActions = [
+    const wsActions = [
       `setReadyState|${READYSTATE.OPEN}|100`,
       `setReadyState|${READYSTATE.CLOSED}|1000`,
     ];
@@ -310,5 +310,35 @@ describe('PersistentWebsocket', function () {
     pws.binaryType = "test";
     clock.tick(1500);
     expect(pws._websocket.binaryType).to.equal("test");
+  });
+
+  it('forwards all websocket events to pws listeners', function () {
+    const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|1`,
+      `setReadyState|${READYSTATE.CLOSED}|100`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','), {
+      initialBackoffDelayMillis: 1,
+    });
+    pws.open();
+    pws.onopen = sinon.spy();
+    pws.onclose = sinon.spy();
+    pws.onmessage = sinon.spy();
+    pws.onerror = sinon.spy();
+
+    clock.tick(10);
+
+    sinon.assert.called(pws.onopen);
+
+    const message = {message: "hi"};
+    fakeWebsocket.onmessage(message);
+    sinon.assert.calledWith(pws.onmessage, message);
+
+    const error = {error: "oops"};
+    fakeWebsocket.onerror(error);
+    sinon.assert.calledWith(pws.onerror, error);
+
+    clock.tick(90);
+    sinon.assert.called(pws.onclose);
   });
 });
