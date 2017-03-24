@@ -12,8 +12,6 @@ An automatically-reconnecting websocket wrapper that respects server reachabilit
 * ["Decorrelated jitter"](https://www.awsarchitectureblog.com/2015/03/backoff.html) backoff
 * [umd](https://github.com/umdjs/umd) / universal library
 * Configurable timeouts, ping intervals, and backoff delay limits
-* < 9kB minified
-
 
 ## Usage
 ```javascript
@@ -34,9 +32,11 @@ pws.open(); // Must be explicitly opened, unlike regular WebSocket
 // except this instance will automatically try to reconnect if the connection dies 
 ```
 
+### Options
+
 The full list of available options is:
 * `debug` _boolean_ (default `false`):  
-Controls logging of verbose/debug output
+Controls logging of verbose/debug output  
 * `initialBackoffDelayMillis` _numeric_ (default `500`):  
 Delay before first reconnection attempt (also acts as a minimum delay)
 * `maxBackoffDelayMillis` _numeric_ (default `120000`):  
@@ -61,7 +61,24 @@ If left undefined, no reachability/internet connectivity check will be performed
 How long to wait for a response from the `reachabilityTestUrl`
 * `reachabilityPollingIntervalMillis` _numeric_ (default `3000`):  
 How long to between a failed reachability test and the next request to the `reachabilityTestUrl`
- 
+
+### Events
+
+In addition to the standard websocket events, the library also provides a "beforereconnect" event. This event is fired 
+when a reconnection is _scheduled_ (as opposed to _attempted_), and has the following properties:
+
+*  `attemptNumber` _numeric_   
+The number of this attempt relative to the last disconnect
+*  `waitMillis` _numeric_  
+The timeout until the next connection attempt will be made (in milliseconds)
+
+It also adds a couple fields to existing websocket events:
+
+* `wasExpected` _boolean_  
+Added to the `close` event
+* `wasReconnect` _boolean_  
+Added to the `open` event
+
 
 ## License
 MIT
