@@ -341,4 +341,84 @@ describe('PersistentWebsocket', function () {
     clock.tick(90);
     sinon.assert.called(pws.onclose);
   });
+
+  it('supports DOM level 2 listeners', function () {
+    const wsActions = [
+      `setReadyState|${READYSTATE.OPEN}|1`,
+      `setReadyState|${READYSTATE.CLOSED}|100`,
+    ];
+    const pws = new PersistentWebsocket(wsActions.join(','), {
+      initialBackoffDelayMillis: 1,
+    });
+    pws.open();
+    const openHandler1 = sinon.spy();
+    const openHandler2 = sinon.spy();
+    const closeHandler1 = sinon.spy();
+    const closeHandler2 = sinon.spy();
+    const messageHandler1 = sinon.spy();
+    const messageHandler2 = sinon.spy();
+    const errorHandler1 = sinon.spy();
+    const errorHandler2 = sinon.spy();
+    const reconnectHandler1 = sinon.spy();
+    const reconnectHandler2 = sinon.spy();
+
+    pws.addEventListener("open", openHandler1);
+    pws.addEventListener("open", openHandler2);
+    pws.addEventListener("close", closeHandler1);
+    pws.addEventListener("close", closeHandler2);
+    pws.addEventListener("message", messageHandler1);
+    pws.addEventListener("message", messageHandler2);
+    pws.addEventListener("error", errorHandler1);
+    pws.addEventListener("error", errorHandler2);
+    pws.addEventListener("beforereconnect", reconnectHandler1);
+    pws.addEventListener("beforereconnect", reconnectHandler2);
+
+    clock.tick(10);
+
+    sinon.assert.called(openHandler1);
+    sinon.assert.called(openHandler2);
+
+    const message = {message: "hi"};
+    fakeWebsocket.onmessage(message);
+    sinon.assert.calledWith(messageHandler1, message);
+    sinon.assert.calledWith(messageHandler2, message);
+
+    const error = {error: "oops"};
+    fakeWebsocket.onerror(error);
+    sinon.assert.calledWith(errorHandler1, error);
+    sinon.assert.calledWith(errorHandler2, error);
+
+    clock.tick(90);
+    sinon.assert.called(closeHandler1);
+    sinon.assert.called(closeHandler2);
+
+    pws.removeEventListener("open", openHandler1);
+    pws.removeEventListener("open", openHandler2);
+    pws.removeEventListener("close", closeHandler1);
+    pws.removeEventListener("close", closeHandler2);
+    pws.removeEventListener("message", messageHandler1);
+    pws.removeEventListener("message", messageHandler2);
+    pws.removeEventListener("error", errorHandler1);
+    pws.removeEventListener("error", errorHandler2);
+
+    clock.tick(10);
+
+    sinon.assert.called(reconnectHandler1);
+    sinon.assert.called(reconnectHandler2);
+
+    sinon.assert.calledOnce(openHandler1);
+    sinon.assert.calledOnce(openHandler2);
+
+    fakeWebsocket.onmessage(message);
+    sinon.assert.calledOnce(messageHandler1);
+    sinon.assert.calledOnce(messageHandler2);
+
+    fakeWebsocket.onerror(error);
+    sinon.assert.calledOnce(errorHandler1);
+    sinon.assert.calledOnce(errorHandler2);
+
+    clock.tick(90);
+    sinon.assert.calledOnce(closeHandler1);
+    sinon.assert.calledOnce(closeHandler2);
+  });
 });

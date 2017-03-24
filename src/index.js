@@ -43,6 +43,13 @@ export class PersistentWebsocket {
     this.onerror = noop;
     this.onbeforereconnect = noop;
 
+    this._handlers = {
+      open: [],
+      close: [],
+      message: [],
+      error: [],
+      beforereconnect: []
+    };
     this._url = url;
     this._protocols = protocols;
     this._options = Object.assign({}, defaultOptions, options);
@@ -81,9 +88,16 @@ export class PersistentWebsocket {
     this._scheduleWebsocketConnectionCheck();
   }
 
+  _callHandlers(eventName, event) {
+    if (this._handlers[eventName]) {
+      this._handlers[eventName].forEach(handler => handler(event));
+    }
+  }
+
   _onWebsocketClose(event) {
     event.wasExpected = this._manuallyClosed;
     this.onclose(event);
+    this._callHandlers("close", event);
     if (!this._manuallyClosed) {
       this._checkReachabilityAndScheduleReconnect();
     }
@@ -91,6 +105,7 @@ export class PersistentWebsocket {
 
   _onWebsocketError(event) {
     this.onerror(event);
+    this._callHandlers("error", event);
   }
 
   _onWebsocketMessage(event) {
@@ -101,11 +116,13 @@ export class PersistentWebsocket {
     this._schedulePing();
 
     this.onmessage(event);
+    this._callHandlers("message", event);
   }
 
   _onWebsocketOpen(event) {
     event.wasReconnect = this._hasConnected;
     this.onopen(event);
+    this._callHandlers("open", event);
     this._hasConnected = true;
     this._retryCount = 0;
 
@@ -184,7 +201,10 @@ export class PersistentWebsocket {
     const waitMillis = this._backoff.nextDelay();
     this._retryCount++;
     this._debugLog(`Scheduling websocket reconnect attempt ${this._retryCount} in ${waitMillis}ms`);
-    this.onbeforereconnect(new AttemptReconnectEvent(this._retryCount, waitMillis));
+
+    const event = new AttemptReconnectEvent(this._retryCount, waitMillis);
+    this.onbeforereconnect(event);
+    this._callHandlers("beforereconnect", event);
 
     this._scheduledReconnectTimeoutId = setTimeout(this._openWebsocket.bind(this), waitMillis);
   }
@@ -250,6 +270,27 @@ export class PersistentWebsocket {
       throw "Can't send through websocket because it was never opened.";
     }
     this._websocket.send(data);
+  }
+
+  addEventListener(event, handler) {
+    if (this._handlers.hasOwnProperty(event)) {
+      this._handlers[event].push(handler);
+    }
+  }
+
+  removeEventListener(event, handler) {
+    if (!this._handlers[event]) {
+      return;
+    }
+
+    if (!handler) {
+      this._handlers[event] = [];
+    } else {
+      const handlerIndex = this._handlers[event].indexOf(handler);
+      if (handlerIndex > -1) {
+        this._handlers[event].splice(handlerIndex, 1);
+      }
+    }
   }
 
   get readyState() {
