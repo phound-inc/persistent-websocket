@@ -1,7 +1,7 @@
 /*global describe, it, before, after */
 import chai from 'chai';
 import sinon from 'sinon';
-import {PersistentWebsocket, READYSTATE} from '../src/index';
+import {PersistentWebsocket, READYSTATE, defaultOptions} from '../src/index';
 
 chai.expect();
 
@@ -51,12 +51,14 @@ describe('PersistentWebsocket', function () {
   let fakeWebsocket, xhr, xhrRequests, clock;
 
   before(function () {
-    PersistentWebsocket.prototype._createWebsocket = (url, protocols) => {
+    xhr = global.XMLHttpRequest = sinon.useFakeXMLHttpRequest();
+    xhr.onCreate = (r) => xhrRequests.push(r);
+
+    defaultOptions['websocketConstructor'] = (url, protocols) => {
       fakeWebsocket = new FakeWebSocket(url, protocols);
       return fakeWebsocket;
     };
-    xhr = global.XMLHttpRequest = sinon.useFakeXMLHttpRequest();
-    xhr.onCreate = (r) => xhrRequests.push(r);
+    defaultOptions['xhrConstructor'] = xhr;
   });
 
   beforeEach(function () {

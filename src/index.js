@@ -7,7 +7,7 @@ export const READYSTATE = {
   CLOSED: 3
 };
 
-const defaultOptions = {
+export const defaultOptions = {
   debug: false,
   initialBackoffDelayMillis: 500,
   maxBackoffDelayMillis: 120000,
@@ -18,6 +18,8 @@ const defaultOptions = {
   reachabilityTestUrl: null,
   reachabilityTestTimeoutMillis: 2000,
   reachabilityPollingIntervalMillis: 3000,
+  xhrConstructor: null,
+  websocketConstructor: null,
 };
 
 function noop() {
@@ -63,19 +65,14 @@ export class PersistentWebsocket {
     this._scheduledReconnectTimeoutId = 0;
     this._websocketConnectionCheckTimeoutId = 0;
     this._reachabilityCheckTimeoutId = 0;
-  }
 
-  _createWebsocket(url, protocols) {
-    return new WebSocket(url, protocols);
-  }
-
-  _createXhr() {
-    return new XMLHttpRequest();
+    this._websocketConstructor = this._options.websocketConstructor || WebSocket;
+    this._xhrConstructor = this._options.xhrConstructor || XMLHttpRequest;
   }
 
   _openWebsocket() {
     this._debugLog("Trying to open websocket");
-    const ws = this._createWebsocket(this._url, this._protocols);
+    const ws = new this._websocketConstructor(this._url, this._protocols);
     if (this._binaryType) {
       ws.binaryType = this._binaryType;
     }
@@ -168,7 +165,7 @@ export class PersistentWebsocket {
     if (!this._options.reachabilityTestUrl) {
       this._scheduleReconnect();
     } else {
-      const xhr = this._createXhr();
+      const xhr = new this._xhrConstructor();
       xhr.open("HEAD", this._options.reachabilityTestUrl);
       xhr.timeout = this._options.reachabilityTestTimeoutMillis;
       xhr.onload = () => {
